@@ -30,8 +30,8 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train the 3D 2048 Q-learning Agent.")
     parser.add_argument(
         "--adapter",
-        required=True,
-        help="Game adapter factory, for example game_2048.my_engine:create_engine",
+        default="game_2048.agent.board3d_adapter:create_engine",
+        help="Game adapter factory, default: Board3D adapter",
     )
     parser.add_argument("--config", default="configs/agent.toml")
     parser.add_argument("--metrics-output", default="artifacts/training_metrics.json")

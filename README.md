@@ -14,11 +14,13 @@
 - configs/agent.toml：训练与奖励参数。
 - static/agent-dashboard.html：训练指标的独立可视化页面。
 
-三维游戏实现后，新增一个实现 SixDirectionGameEngine 的适配器工厂，即可开始训练：
+Agent 已经接入 Board3D。状态为 4×4×4 的 64 个格子，动作依次为 left、right、up、down、forward、back；前端中 forward/back 对应 Q/E。
 
-    uv run python scripts/train_agent.py --adapter game_2048.my_engine:create_engine
+在 game/ 仓库根目录执行：
 
-训练会生成 artifacts/training_metrics.json；在浏览器打开 static/agent-dashboard.html 后选择该文件即可查看奖励和得分曲线。
+    uv run python scripts/train_agent.py
+
+训练会生成 artifacts/training_metrics.json；在浏览器打开 static/agent-dashboard.html 后选择该文件即可查看奖励和得分曲线。若需要使用其他游戏引擎适配器，可传入 --adapter package.module:factory。
 
 ## 验证
 

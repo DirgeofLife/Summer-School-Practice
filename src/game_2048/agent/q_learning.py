@@ -10,7 +10,7 @@ from .contracts import Action, Observation
 
 
 class QLearningAgent:
-    """Learn state-action values with epsilon-greedy exploration."""
+    """Learn Board3D state-action values with epsilon-greedy exploration."""
 
     def __init__(self, config: QLearningConfig) -> None:
         """Create an empty Q-table with reproducible random exploration."""

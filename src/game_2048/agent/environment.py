@@ -28,20 +28,20 @@ class RewardBreakdown:
 
 
 def encode_observation(snapshot: GameSnapshot) -> Observation:
-    """Flatten six faces and encode each tile as its base-two exponent."""
+    """Flatten the 4x4x4 cube and encode each tile as its base-two exponent."""
 
     encoded: list[int] = []
-    for face in snapshot.faces:
-        for row in face:
+    for layer in snapshot.grid:
+        for row in layer:
             for tile in row:
                 encoded.append(0 if tile == 0 else int(log2(tile)))
     return tuple(encoded)
 
 
 def largest_tile(snapshot: GameSnapshot) -> int:
-    """Return the largest tile visible across all six game faces."""
+    """Return the largest tile visible anywhere in the 4x4x4 cube."""
 
-    return max(tile for face in snapshot.faces for row in face for tile in row)
+    return max(tile for layer in snapshot.grid for row in layer for tile in row)
 
 
 class ThreeD2048Environment:
@@ -119,7 +119,7 @@ class ThreeD2048Environment:
         """Build JSON-serializable state and reward details for visualisation."""
 
         return {
-            "faces": snapshot.faces,
+            "grid": snapshot.grid,
             "score": snapshot.score,
             "largest_tile": largest_tile(snapshot),
             "won": snapshot.won,

@@ -7,27 +7,26 @@ from enum import Enum
 from typing import Protocol, TypeAlias
 
 
-Face: TypeAlias = tuple[tuple[int, ...], ...]
-Faces: TypeAlias = tuple[Face, Face, Face, Face, Face, Face]
+Cube: TypeAlias = tuple[tuple[tuple[int, ...], ...], ...]
 Observation: TypeAlias = tuple[int, ...]
 
 
 class Action(str, Enum):
-    """Enumerate the six legal moves in the three-dimensional 2048 game."""
+    """Enumerate the six legal moves implemented by Board3D."""
 
     LEFT = "left"
     RIGHT = "right"
     UP = "up"
     DOWN = "down"
-    W = "w"
-    S = "s"
+    FORWARD = "forward"
+    BACK = "back"
 
 
 @dataclass(frozen=True)
 class GameSnapshot:
-    """Represent the observable state returned by a six-face game engine."""
+    """Represent the observable state returned by the 4x4x4 game engine."""
 
-    faces: Faces
+    grid: Cube
     score: int
     won: bool
     game_over: bool

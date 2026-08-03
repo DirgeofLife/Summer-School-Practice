@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2048 3D — 4×4×4 立体空间</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #0d0d1a;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  canvas { display: block; }
+
+  #ui {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    pointer-events: none;
+    z-index: 10;
+    padding: 18px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .panel {
+    background: rgba(18, 18, 38, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 10px 18px;
+    text-align: center;
+    pointer-events: auto;
+  }
+
+  .panel .label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #8888aa;
+    margin-bottom: 2px;
+  }
+
+  #score { display: block; font-size: 26px; font-weight: bold; color: #fff; }
+
+  button {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.2s;
+    letter-spacing: 0.5px;
+  }
+  button:hover { background: rgba(255,255,255,0.22); }
+
+  #layer-btns {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  #layer-btns .label { pointer-events: none; }
+
+  #message-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(8, 8, 24, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    pointer-events: auto;
+  }
+  #message-overlay.hidden { display: none; }
+
+  .message-box {
+    background: rgba(30, 30, 60, 0.95);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px;
+    padding: 36px 52px;
+    text-align: center;
+  }
+  #message-text { font-size: 36px; font-weight: bold; color: #fff; margin-bottom: 20px; }
+
+  .hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: rgba(255,255,255,0.42);
+    letter-spacing: 1px;
+    z-index: 10;
+    pointer-events: none;
+    text-align: center;
+    line-height: 1.7;
+  }
+  .hint a {
+    color: rgba(255,255,255,0.6);
+    pointer-events: auto;
+  }
+
+  @media (max-width: 600px) {
+    #ui { padding: 10px; gap: 8px; }
+    #score { font-size: 20px; }
+    .hint { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div class="panel">
+    <span class="label">SCORE</span>
+    <span id="score">0</span>
+  </div>
+  <button id="new-game-btn">New Game</button>
+  <div class="panel" id="layer-btns">
+    <span class="label">LAYER</span>
+    <button id="layer-down-btn" title="方块向下层滑动 (Q)">▼</button>
+    <button id="layer-up-btn" title="方块向上层滑动 (E)">▲</button>
+  </div>
+</div>
+
+<div id="message-overlay" class="hidden">
+  <div class="message-box">
+    <p id="message-text"></p>
+    <button id="message-close-btn">Continue</button>
+  </div>
+</div>
+
+<p class="hint">
+  WASD / 方向键：前后左右 · Q / E 或 ▲▼：上下换层 · 拖拽旋转 · 滚轮缩放<br>
+  <a href="/">返回 2D 版</a>
+</p>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ─────────────────────────────────────
+// 常量（棋盘尺寸、方向配置）
+// ─────────────────────────────────────
+const SIZE = 4;
+const CELL_SIZE = 1.0;
+const LAYER_GAP = 1.55;
+// 棋子相对层板的抬升高度，让棋子立在层板上方而不是嵌入板中
+const PIECE_LIFT = 0.5;
+
+// axis: 0=col(c) 1=row(r) 2=layer(z)；reverse=false 表示向索引小的一侧滑动
+const DIRECTIONS3D = {
+  left:    { axis: 0, reverse: false },
+  right:   { axis: 0, reverse: true },
+  up:      { axis: 1, reverse: false },
+  down:    { axis: 1, reverse: true },
+  forward: { axis: 2, reverse: false },
+  back:    { axis: 2, reverse: true },
+};
+
+const DIRECTION_MAP = {
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+  w: 'up', W: 'up', s: 'down', S: 'down', a: 'left', A: 'left', d: 'right', D: 'right',
+  q: 'forward', Q: 'forward', e: 'back', E: 'back',
+};
+
+const PIECE_COLORS = {
+  2: 0x8ee6ff, 4: 0x7ef0b0, 8: 0xffd27a, 16: 0xff9b6a,
+  32: 0xff6b9d, 64: 0xc77dff, 128: 0xffe14d, 256: 0x4dffd5,
+  512: 0x5ea0ff, 1024: 0xff5c8a, 2048: 0xffd700,
+};
+
+// 不同层的底板颜色（从下往上）
+const LAYER_COLORS = [0x23254f, 0x2c3160, 0x363c71, 0x404982];
+
+function getPieceScale(value) {
+  return Math.min(0.85 + Math.log2(value) * 0.02, 1.1);
+}
+
+// ─────────────────────────────────────
+// 场景初始化
+// ─────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0d1a);
+scene.fog = new THREE.Fog(0x0d0d1a, 18, 42);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.5, 60);
+const cameraLookTarget = new THREE.Vector3(0, 0, 0);
+const orbitState = { theta: 0.7, phi: 1.02, radius: 11.5 };
+updateCameraPosition();
+
+// 灯光
+scene.add(new THREE.AmbientLight(0x606080, 2.2));
+
+const keyLight = new THREE.DirectionalLight(0xfff5e8, 4.0);
+keyLight.position.set(6, 12, 4);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.width = 1024;
+keyLight.shadow.mapSize.height = 1024;
+keyLight.shadow.camera.left = -12;
+keyLight.shadow.camera.right = 12;
+keyLight.shadow.camera.top = 12;
+keyLight.shadow.camera.bottom = -12;
+keyLight.shadow.bias = -0.0001;
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x8899cc, 1.6);
+fillLight.position.set(-5, 2, -3);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xffffff, 2.0);
+rimLight.position.set(0, 1.5, 10);
+scene.add(rimLight);
+
+// 星空背景
+const starsGeo = new THREE.BufferGeometry();
+const starCount = 500;
+const starPositions = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  starPositions[i * 3] = (Math.random() - 0.5) * 30;
+  starPositions[i * 3 + 1] = Math.random() * 20 - 6;
+  starPositions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+}
+starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+const stars = new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.035, transparent: true, opacity: 0.7 }));
+scene.add(stars);
+
+// 地面（承接阴影）
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(30, 30),
+  new THREE.MeshStandardMaterial({ color: 0x141428, roughness: 0.95, metalness: 0.05 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -4.2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ─────────────────────────────────────
+// 棋盘构建（4 层堆叠）
+// ─────────────────────────────────────
+const boardGroup = new THREE.Group();
+scene.add(boardGroup);
+
+function gridToWorld(r, c, z) {
+  // 游戏坐标 → 世界坐标：row→世界Z，col→世界X，layer→世界Y（层向上堆叠）
+  // y 叠加 PIECE_LIFT，使棋子立在层板上方；格子薄板在调用处自行覆写 y，不受影响
+  return new THREE.Vector3(
+    (c - 1.5) * CELL_SIZE,
+    (z - 1.5) * LAYER_GAP + PIECE_LIFT,
+    (r - 1.5) * CELL_SIZE
+  );
+}
+
+for (let z = 0; z < SIZE; z++) {
+  const layerY = (z - 1.5) * LAYER_GAP;
+  const layerColor = LAYER_COLORS[z];
+
+  // 该层的透明底板（玻璃质感）
+  const slabMat = new THREE.MeshStandardMaterial({
+    color: layerColor, roughness: 0.35, metalness: 0.2,
+    transparent: true, opacity: 0.18,
+    emissive: layerColor, emissiveIntensity: 0.35,
+    depthWrite: false,
+  });
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(4.7, 0.08, 4.7), slabMat);
+  slab.position.y = layerY;
+  slab.receiveShadow = true;
+  boardGroup.add(slab);
+
+  // 层板边框描边，提升透明板的轮廓辨识度
+  const slabEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(slab.geometry),
+    new THREE.LineBasicMaterial({ color: 0x9aa4d8, transparent: true, opacity: 0.35 })
+  );
+  slab.add(slabEdges);
+
+  // 16 个格子位（半透明白色薄板，弱光时微微发光）
+  const cellMat = new THREE.MeshStandardMaterial({
+    color: 0x9aa4d8, roughness: 0.5, metalness: 0.1,
+    transparent: true, opacity: 0.16, emissive: layerColor, emissiveIntensity: 0.6,
+  });
+  const cellGeo = new THREE.BoxGeometry(0.9, 0.03, 0.9);
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const cell = new THREE.Mesh(cellGeo, cellMat);
+      const p = gridToWorld(r, c, z);
+      cell.position.set(p.x, layerY + 0.05, p.z);
+      cell.receiveShadow = true;
+      boardGroup.add(cell);
+    }
+  }
+}
+
+// ─────────────────────────────────────
+// 方块（棋子）创建
+// ─────────────────────────────────────
+function createNumberSprite(value) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  const fontSize = value >= 1024 ? 72 : value >= 128 ? 84 : 104;
+  ctx.font = `bold ${fontSize}px "Segoe UI", Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(value), 128, 128);
+  const mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true });
+  return new THREE.Sprite(mat);
+}
+
+function createPieceGroup(value) {
+  const group = new THREE.Group();
+  const color = PIECE_COLORS[value] || 0x3c3a32;
+  const size = 0.84;
+
+  const geo = new THREE.BoxGeometry(size, size, size);
+  const mat = new THREE.MeshStandardMaterial({
+    color, roughness: 0.28, metalness: 0.15,
+    emissive: color, emissiveIntensity: 0.25,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+
+  // 白色描边
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo),
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
+  );
+  group.add(edges);
+
+  // 顶部数字精灵（悬浮在棋子顶面上方，尺寸略小于棋子）
+  const sprite = createNumberSprite(value);
+  sprite.position.set(0, 0.6, 0);
+  sprite.scale.set(0.75, 0.75, 1);
+  group.add(sprite);
+
+  group.scale.setScalar(getPieceScale(value));
+  return group;
+}
+
+function disposePiece(group) {
+  group.traverse(child => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      if (child.material.map) child.material.map.dispose();
+      child.material.dispose();
+    }
+  });
+}
+
+function rebuildPieceMesh(entry, value) {
+  scene.remove(entry.group);
+  disposePiece(entry.group);
+  entry.group = createPieceGroup(value);
+  entry.group.position.copy(entry.currentPos);
+  scene.add(entry.group);
+}
+
+// ─────────────────────────────────────
+// 粒子系统（合并特效）
+// ─────────────────────────────────────
+const particles = [];
+const particlePool = [];
+
+function spawnParticles(position, color, count) {
+  for (let i = 0; i < count; i++) {
+    let p;
+    if (particlePool.length > 0) {
+      p = particlePool.pop();
+      p.visible = true;
+    } else {
+      const geo = new THREE.SphereGeometry(0.035, 6, 6);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, emissive: color, emissiveIntensity: 0.8, transparent: true });
+      p = new THREE.Mesh(geo, mat);
+      scene.add(p);
+    }
+    p.position.copy(position);
+    p.userData = {
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 4 + 1, (Math.random() - 0.5) * 3),
+      life: 0.6 + Math.random() * 0.4,
+      age: 0,
+    };
+    particles.push(p);
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.userData.age += dt;
+    if (p.userData.age > p.userData.life) {
+      p.visible = false;
+      p.position.set(0, -999, 0);
+      particlePool.push(p);
+      particles.splice(i, 1);
+    } else {
+      const progress = p.userData.age / p.userData.life;
+      p.userData.velocity.y += -6 * dt;
+      p.position.addScaledVector(p.userData.velocity, dt);
+      const s = 1 - progress;
+      p.scale.setScalar(s);
+      p.material.opacity = s;
+    }
+  }
+}
+
+// ─────────────────────────────────────
+// 游戏状态与棋子条目
+// ─────────────────────────────────────
+const gameState = {
+  sessionId: null,
+  score: 0,
+  gameOver: false,
+  won: false,
+  moving: false,
+  grid: Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => Array(SIZE).fill(0))),
+};
+
+// pieceEntries: Map<"z,r,c", { group, value, targetPos, currentPos, animType, animProgress }>
+const pieceEntries = new Map();
+let shakeIntensity = 0;
+
+function pieceKey(z, r, c) { return `${z},${r},${c}`; }
+
+// ─────────────────────────────────────
+// 动画缓动函数
+// ─────────────────────────────────────
+function easeOutBack(t) {
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+// ─────────────────────────────────────
+// 棋盘同步与滑动动画
+// 关键：每条线上旧、新方块都按“滑动目标端在前”排序后按索引配对，
+// 保证方块不会交叉错误（修正了 2D 版的配对缺陷）。
+// ─────────────────────────────────────
+function getLineCells(grid, axis, f1, f2) {
+  const cells = [];
+  for (let k = 0; k < SIZE; k++) {
+    let z, r, c;
+    if (axis === 0) { z = f1; r = f2; c = k; }
+    else if (axis === 1) { z = f1; c = f2; r = k; }
+    else { r = f1; c = f2; z = k; }
+    const val = grid[z][r][c];
+    if (val > 0) cells.push({ z, r, c, val, idx: k });
+  }
+  return cells;
+}
+
+function syncBoard(newGrid, oldGrid, direction) {
+  const { axis, reverse } = DIRECTIONS3D[direction];
+  const cmp = (a, b) => reverse ? b.idx - a.idx : a.idx - b.idx;
+  const newKeys = new Set();
+
+  for (let f1 = 0; f1 < SIZE; f1++) {
+    for (let f2 = 0; f2 < SIZE; f2++) {
+      const oldLine = getLineCells(oldGrid, axis, f1, f2).sort(cmp);
+      const newLine = getLineCells(newGrid, axis, f1, f2).sort(cmp);
+
+      let oi = 0;
+      for (const np of newLine) {
+        const nKey = pieceKey(np.z, np.r, np.c);
+        newKeys.add(nKey);
+        const worldPos = gridToWorld(np.r, np.c, np.z);
+
+        if (oi < oldLine.length) {
+          const src = oldLine[oi];
+          const srcKey = pieceKey(src.z, src.r, src.c);
+          const isMerge = oi + 1 < oldLine.length && src.val === oldLine[oi + 1].val;
+          const entry = pieceEntries.get(srcKey);
+
+          if (entry) {
+            pieceEntries.delete(srcKey);
+            entry.targetPos = worldPos.clone();
+
+            if (isMerge) {
+              entry.value = np.val;
+              rebuildPieceMesh(entry, np.val);
+              entry.animType = 'merge';
+              entry.animProgress = 0;
+              spawnParticles(
+                new THREE.Vector3(worldPos.x, worldPos.y + 0.5, worldPos.z),
+                PIECE_COLORS[np.val] || 0xedc22e,
+                Math.min(np.val / 4, 40)
+              );
+
+              // 第二个合并源滑到同一目标后移除
+              const src2 = oldLine[oi + 1];
+              const src2Key = pieceKey(src2.z, src2.r, src2.c);
+              const entry2 = pieceEntries.get(src2Key);
+              if (entry2) {
+                entry2.targetPos = worldPos.clone();
+                entry2.animType = 'move';
+                entry2.animProgress = 0;
+                const tmpKey = `_m_${nKey}_${Date.now()}`;
+                pieceEntries.set(tmpKey, entry2);
+                setTimeout(() => {
+                  const e = pieceEntries.get(tmpKey);
+                  if (e) { scene.remove(e.group); disposePiece(e.group); pieceEntries.delete(tmpKey); }
+                }, 200);
+              }
+            } else if (src.z !== np.z || src.r !== np.r || src.c !== np.c) {
+              entry.animType = 'move';
+              entry.animProgress = 0;
+            }
+
+            pieceEntries.set(nKey, entry);
+          } else {
+            // 源条目缺失时的兜底：原地重建
+            const fallback = {
+              group: createPieceGroup(np.val),
+              value: np.val,
+              targetPos: worldPos.clone(),
+              currentPos: worldPos.clone(),
+              animType: 'appear',
+              animProgress: 0,
+            };
+            fallback.group.position.copy(worldPos);
+            scene.add(fallback.group);
+            pieceEntries.set(nKey, fallback);
+          }
+          oi += isMerge ? 2 : 1;
+        } else {
+          // 新生成的方块：从下方弹出
+          const entry = {
+            group: createPieceGroup(np.val),
+            value: np.val,
+            targetPos: worldPos.clone(),
+            currentPos: worldPos.clone().add(new THREE.Vector3(0, -3, 0)),
+            animType: 'spawn',
+            animProgress: 0,
+          };
+          entry.group.position.copy(entry.currentPos);
+          scene.add(entry.group);
+          pieceEntries.set(nKey, entry);
+        }
+      }
+    }
+  }
+
+  // 移除棋盘上已不存在的方块
+  for (const [key, entry] of pieceEntries) {
+    if (!newKeys.has(key) && !key.startsWith('_m_')) {
+      scene.remove(entry.group);
+      disposePiece(entry.group);
+      pieceEntries.delete(key);
+    }
+  }
+}
+
+// ─────────────────────────────────────
+// 主循环
+// ─────────────────────────────────────
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  for (const [key, entry] of pieceEntries) {
+    const speed = 8;
+    entry.currentPos.lerp(entry.targetPos, Math.min(speed * dt, 1));
+    entry.group.position.copy(entry.currentPos);
+
+    // 生成动画：自下而上弹出
+    if (entry.animType === 'spawn') {
+      entry.animProgress += dt;
+      const t = Math.min(entry.animProgress / 0.45, 1);
+      entry.group.position.y = entry.targetPos.y + (1 - easeOutBack(t)) * -3;
+      if (t >= 1) {
+        entry.animType = 'idle';
+        entry.group.position.copy(entry.targetPos);
+      }
+    }
+
+    // 合并动画：放大脉冲
+    if (entry.animType === 'merge') {
+      entry.animProgress += dt;
+      const t = Math.min(entry.animProgress / 0.35, 1);
+      const s = 1 + Math.sin(t * Math.PI) * 0.3;
+      entry.group.scale.setScalar(getPieceScale(entry.value) * s);
+      if (t >= 1) {
+        entry.animType = 'idle';
+        entry.group.scale.setScalar(getPieceScale(entry.value));
+      }
+    }
+
+    // 移动动画：轻微跳跃
+    if (entry.animType === 'move') {
+      entry.animProgress += dt;
+      const t = Math.min(entry.animProgress / 0.15, 1);
+      entry.group.position.y = entry.currentPos.y + Math.sin(t * Math.PI) * 0.3;
+      if (t >= 1) entry.animType = 'idle';
+    }
+  }
+
+  updateParticles(dt);
+
+  // 相机震动
+  if (shakeIntensity > 0.001) {
+    camera.position.copy(getOrbitPosition()).add(new THREE.Vector3(
+      (Math.random() - 0.5) * shakeIntensity * 2,
+      (Math.random() - 0.5) * shakeIntensity * 2,
+      (Math.random() - 0.5) * shakeIntensity * 2
+    ));
+    shakeIntensity *= Math.pow(0.02, dt);
+  } else {
+    shakeIntensity = 0;
+    camera.position.lerp(getOrbitPosition(), 4 * dt);
+  }
+  camera.lookAt(cameraLookTarget);
+
+  // 方块待机浮动
+  const time = performance.now() * 0.001;
+  for (const [key, entry] of pieceEntries) {
+    if (entry.animType === 'idle' || entry.animType === 'appear') {
+      const bob = Math.sin(time * 1.5 + key.charCodeAt(0)) * 0.015;
+      entry.group.position.y = entry.targetPos.y + bob;
+    }
+  }
+
+  stars.rotation.y += dt * 0.02;
+  renderer.render(scene, camera);
+}
+
+// ─────────────────────────────────────
+// 相机辅助
+// ─────────────────────────────────────
+function getOrbitPosition() {
+  const { theta, phi, radius } = orbitState;
+  return new THREE.Vector3(
+    radius * Math.sin(phi) * Math.sin(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.cos(theta)
+  );
+}
+
+function updateCameraPosition() {
+  camera.position.copy(getOrbitPosition());
+  camera.lookAt(cameraLookTarget);
+}
+
+// ─────────────────────────────────────
+// UI 辅助
+// ─────────────────────────────────────
+function updateScoreDisplay() {
+  document.getElementById('score').textContent = gameState.score;
+}
+
+function showMessage(text) {
+  document.getElementById('message-text').textContent = text;
+  document.getElementById('message-overlay').classList.remove('hidden');
+}
+
+function hideMessage() {
+  document.getElementById('message-overlay').classList.add('hidden');
+}
+
+// ─────────────────────────────────────
+// API 交互
+// ─────────────────────────────────────
+async function apiNewGame() {
+  const resp = await fetch('/api/game3d/new', { method: 'POST' });
+  const data = await resp.json();
+  gameState.sessionId = data.session_id;
+  gameState.score = 0;
+  gameState.gameOver = false;
+  gameState.won = false;
+  gameState.moving = false;
+  gameState.grid = data.state.board;
+  updateScoreDisplay();
+  hideMessage();
+
+  for (const [key, entry] of pieceEntries) {
+    scene.remove(entry.group);
+    disposePiece(entry.group);
+  }
+  pieceEntries.clear();
+  shakeIntensity = 0;
+
+  for (let z = 0; z < SIZE; z++) {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const val = gameState.grid[z][r][c];
+        if (val === 0) continue;
+        const worldPos = gridToWorld(r, c, z);
+        const entry = {
+          group: createPieceGroup(val),
+          value: val,
+          targetPos: worldPos.clone(),
+          currentPos: worldPos.clone().add(new THREE.Vector3(0, -3, 0)),
+          animType: 'spawn',
+          animProgress: 0,
+        };
+        entry.group.position.copy(entry.currentPos);
+        scene.add(entry.group);
+        pieceEntries.set(pieceKey(z, r, c), entry);
+      }
+    }
+  }
+}
+
+async function apiMakeMove(direction) {
+  if (gameState.moving || gameState.gameOver) return;
+  gameState.moving = true;
+
+  const oldGrid = gameState.grid.map(layer => layer.map(row => [...row]));
+
+  try {
+    const resp = await fetch(`/api/game3d/${gameState.sessionId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction }),
+    });
+    if (!resp.ok) { gameState.moving = false; return; }
+    const data = await resp.json();
+
+    if (data.moved) {
+      gameState.grid = data.state.board;
+      gameState.score = data.state.score;
+      updateScoreDisplay();
+      syncBoard(data.state.board, oldGrid, direction);
+
+      if (data.state.won && !gameState.won) {
+        gameState.won = true;
+        setTimeout(() => showMessage('You Win!'), 400);
+      }
+      if (data.state.game_over) {
+        gameState.gameOver = true;
+        setTimeout(() => showMessage('Game Over!'), 400);
+      }
+    }
+  } catch (e) {
+    console.error('Move error:', e);
+  }
+  gameState.moving = false;
+}
+
+// ─────────────────────────────────────
+// 输入处理
+// ─────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const d = DIRECTION_MAP[e.key];
+  if (!d) return;
+  e.preventDefault();
+  apiMakeMove(d);
+});
+
+// 触摸滑动（仅 4 方向）
+let touchStartX = 0, touchStartY = 0;
+document.addEventListener('touchstart', e => {
+  if (e.target.tagName === 'BUTTON') return;
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return;
+  apiMakeMove(Math.abs(dx) > Math.abs(dy)
+    ? (dx > 0 ? 'right' : 'left')
+    : (dy > 0 ? 'down' : 'up'));
+});
+
+// 拖拽旋转
+let isDragging = false;
+let prevMouse = { x: 0, y: 0 };
+document.addEventListener('mousedown', e => {
+  if (e.target.tagName === 'BUTTON') return;
+  isDragging = true;
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+document.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - prevMouse.x;
+  const dy = e.clientY - prevMouse.y;
+  orbitState.theta -= dx * 0.005;
+  orbitState.phi = Math.max(0.25, Math.min(1.4, orbitState.phi - dy * 0.005));
+  updateCameraPosition();
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+document.addEventListener('mouseup', () => { isDragging = false; });
+
+// 滚轮缩放
+document.addEventListener('wheel', e => {
+  orbitState.radius = Math.max(6, Math.min(18, orbitState.radius + e.deltaY * 0.01));
+  updateCameraPosition();
+}, { passive: true });
+
+// 按钮
+document.getElementById('new-game-btn').addEventListener('click', apiNewGame);
+document.getElementById('message-close-btn').addEventListener('click', hideMessage);
+document.getElementById('layer-down-btn').addEventListener('click', () => apiMakeMove('forward'));
+document.getElementById('layer-up-btn').addEventListener('click', () => apiMakeMove('back'));
+
+// 窗口缩放
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─────────────────────────────────────
+// 初始化
+// ─────────────────────────────────────
+(async function init() {
+  const sid = localStorage.getItem('game2048_3d_session');
+  if (sid) {
+    try {
+      const r = await fetch(`/api/game3d/${sid}/state`);
+      if (r.ok) {
+        const d = await r.json();
+        gameState.sessionId = sid;
+        gameState.score = d.score;
+        gameState.won = d.won;
+        gameState.gameOver = d.game_over;
+        gameState.grid = d.board;
+        updateScoreDisplay();
+        if (d.game_over) showMessage('Game Over!');
+
+        for (let z = 0; z < SIZE; z++) {
+          for (let r = 0; r < SIZE; r++) {
+            for (let c = 0; c < SIZE; c++) {
+              const val = gameState.grid[z][r][c];
+              if (val === 0) continue;
+              const worldPos = gridToWorld(r, c, z);
+              const entry = {
+                group: createPieceGroup(val),
+                value: val,
+                targetPos: worldPos.clone(),
+                currentPos: worldPos.clone(),
+                animType: 'idle',
+                animProgress: 0,
+              };
+              entry.group.position.copy(worldPos);
+              scene.add(entry.group);
+              pieceEntries.set(pieceKey(z, r, c), entry);
+            }
+          }
+        }
+        animate();
+        return;
+      }
+    } catch (e) {}
+  }
+  await apiNewGame();
+  animate();
+})();
+
+window.addEventListener('beforeunload', () => {
+  if (gameState.sessionId) localStorage.setItem('game2048_3d_session', gameState.sessionId);
+});
+</script>
+</body>
+</html>
