@@ -28,40 +28,48 @@
     z-index: 10;
     padding: 18px;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     gap: 14px;
     flex-wrap: wrap;
   }
 
+  /* 面板与按钮统一 40px 高，横排内容，保证同一行视觉对齐 */
   .panel {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     background: rgba(18, 18, 38, 0.85);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 12px;
-    padding: 10px 18px;
+    border-radius: 8px;
+    padding: 0 14px;
     text-align: center;
     pointer-events: auto;
   }
 
   .panel .label {
-    display: block;
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 2px;
     color: #8888aa;
-    margin-bottom: 2px;
+    white-space: nowrap;
   }
 
-  #score { display: block; font-size: 26px; font-weight: bold; color: #fff; }
+  #score { font-size: 24px; font-weight: bold; color: #fff; line-height: 1; }
 
   button {
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(255,255,255,0.1);
     color: #fff;
     border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 10px;
-    padding: 10px 18px;
-    font-size: 13px;
+    border-radius: 8px;
+    padding: 0 18px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     pointer-events: auto;
@@ -70,12 +78,15 @@
   }
   button:hover { background: rgba(255,255,255,0.22); }
 
+
   #layer-btns {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
   }
   #layer-btns .label { pointer-events: none; }
+  /* 换层按钮收窄并降高，放进 40px 面板内 */
+  #layer-btns button { height: 32px; padding: 0 10px; }
 
   #message-overlay {
     position: fixed;
@@ -117,10 +128,79 @@
     pointer-events: auto;
   }
 
+  /* 方向指示盘：随视角旋转，箭头指向 = 对应按键的移动方向 */
+  #dir-hud {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 20;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    text-align: center;
+  }
+  .dir-hud-title {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.5);
+    background: rgba(18,18,38,0.6);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 3px 8px;
+    margin-bottom: 6px;
+  }
+  #dir-pad {
+    position: relative;
+    width: 148px;
+    height: 148px;
+    background: rgba(18,18,38,0.5);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    backdrop-filter: blur(8px);
+  }
+  .dir-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.35);
+  }
+  .dir-chip {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 8px;
+    padding: 2px 6px;
+    color: #fff;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.2s;
+  }
+  .dir-chip .dir-arrow {
+    display: inline-block;
+    font-size: 12px;
+    line-height: 1;
+  }
+  .dir-chip .dir-key {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
   @media (max-width: 600px) {
     #ui { padding: 10px; gap: 8px; }
     #score { font-size: 20px; }
     .hint { font-size: 10px; }
+    #dir-pad { width: 112px; height: 112px; }
+    .dir-chip { padding: 1px 4px; font-size: 10px; }
+    .dir-chip .dir-arrow, .dir-chip .dir-key { font-size: 10px; }
   }
 </style>
 </head>
@@ -146,8 +226,23 @@
   </div>
 </div>
 
+<div id="dir-hud">
+  <div class="dir-hud-title">移动方向（随视角旋转）</div>
+  <div id="dir-pad">
+    <div class="dir-center"></div>
+    <div class="dir-chip" id="dir-chip-w"><span class="dir-arrow">➤</span><span class="dir-key">W</span></div>
+    <div class="dir-chip" id="dir-chip-a"><span class="dir-arrow">➤</span><span class="dir-key">A</span></div>
+    <div class="dir-chip" id="dir-chip-s"><span class="dir-arrow">➤</span><span class="dir-key">S</span></div>
+    <div class="dir-chip" id="dir-chip-d"><span class="dir-arrow">➤</span><span class="dir-key">D</span></div>
+    <div class="dir-chip" id="dir-chip-q"><span class="dir-arrow">➤</span><span class="dir-key">Q</span></div>
+    <div class="dir-chip" id="dir-chip-e"><span class="dir-arrow">➤</span><span class="dir-key">E</span></div>
+  </div>
+</div>
+
 <p class="hint">
-  WASD / 方向键：前后左右 · Q / E 或 ▲▼：上下换层 · 拖拽旋转 · 滚轮缩放<br>
+  目标：合成 <b>32768</b> · WASD / 方向键：前后左右 · Q / E 或 ▲▼：上下换层<br>
+  左键拖拽旋转 · 右键拖拽平移 · 滚轮缩放（可转到棋盘下方看底层）<br>
+  右下角指示盘随视角旋转，箭头指向 = 该键的移动方向<br>
   <a href="/">返回 2D 版</a>
 </p>
 
@@ -191,13 +286,16 @@ const PIECE_COLORS = {
   2: 0x8ee6ff, 4: 0x7ef0b0, 8: 0xffd27a, 16: 0xff9b6a,
   32: 0xff6b9d, 64: 0xc77dff, 128: 0xffe14d, 256: 0x4dffd5,
   512: 0x5ea0ff, 1024: 0xff5c8a, 2048: 0xffd700,
+  4096: 0x8b5cf6, 8192: 0xff3b30, 16384: 0x40c9ff, 32768: 0xffffff,
 };
 
 // 不同层的底板颜色（从下往上）
 const LAYER_COLORS = [0x23254f, 0x2c3160, 0x363c71, 0x404982];
 
+// 棋子尺寸随数值增大而变大，但最大不得超过格子薄板范围(0.9)，避免溢出格位。
+// 基础几何边长 0.84，故缩放上限 1.06 → 立方体 0.89，恰好落在板内。
 function getPieceScale(value) {
-  return Math.min(0.85 + Math.log2(value) * 0.02, 1.1);
+  return Math.min(0.86 + Math.log2(value) * 0.02, 1.06);
 }
 
 // ─────────────────────────────────────
@@ -216,9 +314,11 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0d0d1a);
 scene.fog = new THREE.Fog(0x0d0d1a, 18, 42);
 
-const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.5, 60);
+// 更宽的视野(FOV)，便于观察整个立体棋盘
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.5, 60);
 const cameraLookTarget = new THREE.Vector3(0, 0, 0);
-const orbitState = { theta: 0.7, phi: 1.02, radius: 11.5 };
+// phi 允许超过 π/2，可转到棋盘下方看到底层；radius 缩放范围更自由
+const orbitState = { theta: 0.7, phi: 1.05, radius: 12.5 };
 updateCameraPosition();
 
 // 灯光
@@ -332,7 +432,7 @@ function createNumberSprite(value) {
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
-  const fontSize = value >= 1024 ? 72 : value >= 128 ? 84 : 104;
+  const fontSize = value >= 10000 ? 52 : value >= 1024 ? 72 : value >= 128 ? 84 : 104;
   ctx.font = `bold ${fontSize}px "Segoe UI", Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -613,7 +713,7 @@ function animate() {
     if (entry.animType === 'merge') {
       entry.animProgress += dt;
       const t = Math.min(entry.animProgress / 0.35, 1);
-      const s = 1 + Math.sin(t * Math.PI) * 0.3;
+      const s = 1 + Math.sin(t * Math.PI) * 0.12;
       entry.group.scale.setScalar(getPieceScale(entry.value) * s);
       if (t >= 1) {
         entry.animType = 'idle';
@@ -657,23 +757,78 @@ function animate() {
 
   stars.rotation.y += dt * 0.02;
   renderer.render(scene, camera);
+
+  // 方向指示盘随视角实时更新
+  updateDirHud();
 }
 
 // ─────────────────────────────────────
 // 相机辅助
 // ─────────────────────────────────────
+// 球面轨道坐标相对 cameraLookTarget 计算，这样平移视角后旋转/缩放都围绕新目标
 function getOrbitPosition() {
   const { theta, phi, radius } = orbitState;
   return new THREE.Vector3(
-    radius * Math.sin(phi) * Math.sin(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.cos(theta)
+    cameraLookTarget.x + radius * Math.sin(phi) * Math.sin(theta),
+    cameraLookTarget.y + radius * Math.cos(phi),
+    cameraLookTarget.z + radius * Math.sin(phi) * Math.cos(theta)
   );
 }
 
 function updateCameraPosition() {
   camera.position.copy(getOrbitPosition());
   camera.lookAt(cameraLookTarget);
+  // 立即刷新相机矩阵，保证 matrixWorldInverse（方向指示盘使用）是最新的
+  camera.updateMatrixWorld();
+}
+
+// 根据当前朝向计算相机的右方与上方（用于右键平移视角）
+function getCameraAxes() {
+  const pos = getOrbitPosition();
+  const dir = cameraLookTarget.clone().sub(pos).normalize();
+  const worldUp = new THREE.Vector3(0, 1, 0);
+  const right = new THREE.Vector3().crossVectors(dir, worldUp).normalize();
+  const up = new THREE.Vector3().crossVectors(right, dir);
+  return { right, up };
+}
+
+// ─────────────────────────────────────
+// 方向指示盘：把每个按键对应的世界方向投影到屏幕上，
+// 箭头实时指向"按下该键棋子会往屏幕哪个方向移动"
+// ─────────────────────────────────────
+const DIR_HUD_MAP = {
+  w: new THREE.Vector3(0, 0, -1),   // up     → 世界 -Z
+  s: new THREE.Vector3(0, 0, 1),    // down   → 世界 +Z
+  a: new THREE.Vector3(-1, 0, 0),   // left   → 世界 -X
+  d: new THREE.Vector3(1, 0, 0),    // right  → 世界 +X
+  q: new THREE.Vector3(0, -1, 0),   // forward→ 世界 -Y（向下层）
+  e: new THREE.Vector3(0, 1, 0),    // back   → 世界 +Y（向上层）
+};
+
+function updateDirHud() {
+  const pad = document.getElementById('dir-pad');
+  if (!pad) return;
+  const padW = pad.clientWidth;
+  const padH = pad.clientHeight;
+  const cx = padW / 2;
+  const cy = padH / 2;
+  const radius = Math.min(padW, padH) * 0.33;
+
+  for (const key of ['w', 'a', 's', 'd', 'q', 'e']) {
+    // 把世界方向变换到相机空间：x=右, y=上, z=纵深
+    const v = DIR_HUD_MAP[key].clone().transformDirection(camera.matrixWorldInverse);
+    // CSS 坐标：x 同向，y 向下（屏幕 y 与相机 y 相反）
+    const csx = v.x;
+    const csy = -v.y;
+    const chip = document.getElementById('dir-chip-' + key);
+    chip.style.left = (cx + csx * radius) + 'px';
+    chip.style.top = (cy + csy * radius) + 'px';
+    const arrow = chip.querySelector('.dir-arrow');
+    arrow.style.transform = `rotate(${Math.atan2(csy, csx) * 180 / Math.PI}deg)`;
+    // 方向几乎正对屏幕时（朝屏幕内/外）箭头会聚到中心，淡出避免误导
+    const visible = Math.hypot(csx, csy);
+    chip.style.opacity = Math.max(0.25, Math.min(1, visible * 1.4));
+  }
 }
 
 // ─────────────────────────────────────
@@ -799,28 +954,45 @@ document.addEventListener('touchend', e => {
     : (dy > 0 ? 'down' : 'up'));
 });
 
-// 拖拽旋转
+// 视角控制：左键拖拽旋转，右键拖拽平移，滚轮缩放
 let isDragging = false;
+let isPanning = false;
 let prevMouse = { x: 0, y: 0 };
+
 document.addEventListener('mousedown', e => {
   if (e.target.tagName === 'BUTTON') return;
   isDragging = true;
+  isPanning = e.button === 2;
   prevMouse = { x: e.clientX, y: e.clientY };
 });
 document.addEventListener('mousemove', e => {
   if (!isDragging) return;
   const dx = e.clientX - prevMouse.x;
   const dy = e.clientY - prevMouse.y;
-  orbitState.theta -= dx * 0.005;
-  orbitState.phi = Math.max(0.25, Math.min(1.4, orbitState.phi - dy * 0.005));
+  if (isPanning) {
+    // 右键平移视角目标
+    const { right, up } = getCameraAxes();
+    const scale = 0.008 * orbitState.radius;
+    cameraLookTarget.addScaledVector(right, -dx * scale);
+    cameraLookTarget.addScaledVector(up, dy * scale);
+  } else {
+    // 左键旋转：phi 允许超过 π/2，可绕到棋盘下方看底层
+    orbitState.theta -= dx * 0.005;
+    orbitState.phi = Math.max(0.15, Math.min(2.9, orbitState.phi - dy * 0.005));
+  }
   updateCameraPosition();
   prevMouse = { x: e.clientX, y: e.clientY };
 });
-document.addEventListener('mouseup', () => { isDragging = false; });
+document.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
+// 阻止右键拖拽时弹出浏览器菜单
+document.addEventListener('contextmenu', e => {
+  if (e.target.tagName === 'BUTTON') return;
+  e.preventDefault();
+});
 
-// 滚轮缩放
+// 滚轮缩放（范围更大）
 document.addEventListener('wheel', e => {
-  orbitState.radius = Math.max(6, Math.min(18, orbitState.radius + e.deltaY * 0.01));
+  orbitState.radius = Math.max(4, Math.min(30, orbitState.radius + e.deltaY * 0.01));
   updateCameraPosition();
 }, { passive: true });
 

@@ -27,8 +27,12 @@ class TestBoard:
         moved = board.slide("left")
         assert moved is True
         assert board.grid[0][0] == 4
-        assert board.grid[0][1] == 0
         assert board.score == 4
+        # 滑动成功后还会随机生成 1 个新方块，总数应为 2（4 + 新方块）
+        non_zero = sum(
+            1 for r in range(4) for c in range(4) if board.grid[r][c] != 0
+        )
+        assert non_zero == 2
 
     def test_slide_left_compact(self):
         board = Board()

@@ -10,6 +10,17 @@ def _empty_grid():
     return [[[0] * 4 for _ in range(4)] for _ in range(4)]
 
 
+def _count_nonzero(board):
+    """统计棋盘上的非零方块数量。"""
+    return sum(
+        1
+        for z in range(4)
+        for r in range(4)
+        for c in range(4)
+        if board.grid[z][r][c] != 0
+    )
+
+
 class TestBoard3D:
     def test_new_board_has_two_tiles(self):
         board = Board3D()
@@ -34,8 +45,10 @@ class TestBoard3D:
         board.score = 0
         moved = board.slide("left")
         assert moved is True
-        assert board.grid[0][0] == [4, 0, 0, 0]
+        assert board.grid[0][0][0] == 4
         assert board.score == 4
+        # 滑动成功后还会随机生成 1 个新方块，总数应为 2（4 + 新方块）
+        assert _count_nonzero(board) == 2
 
     def test_slide_up_merges_equal_tiles_in_column(self):
         board = Board3D()
@@ -46,8 +59,8 @@ class TestBoard3D:
         moved = board.slide("up")
         assert moved is True
         assert board.grid[0][0][0] == 4
-        assert board.grid[0][1][0] == 0
         assert board.score == 4
+        assert _count_nonzero(board) == 2
 
     def test_slide_forward_merges_across_layers(self):
         board = Board3D()
@@ -58,8 +71,8 @@ class TestBoard3D:
         moved = board.slide("forward")
         assert moved is True
         assert board.grid[0][0][0] == 4
-        assert board.grid[1][0][0] == 0
         assert board.score == 4
+        assert _count_nonzero(board) == 2
 
     def test_slide_back_merges_across_layers(self):
         board = Board3D()
@@ -69,7 +82,8 @@ class TestBoard3D:
         moved = board.slide("back")
         assert moved is True
         assert board.grid[3][1][1] == 4
-        assert board.grid[2][1][1] == 0
+        assert board.score == 4
+        assert _count_nonzero(board) == 2
 
     def test_no_change_returns_false(self):
         board = Board3D()

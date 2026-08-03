@@ -17,7 +17,8 @@ class Board3D:
 
     SIZE = 4
     SPAWN_VALUES = [2] * 9 + [4]  # 90% 2, 10% 4
-    WIN_VALUE = 2048
+    # 4x4x4 共 64 格，2048 太容易；2^15=32768 约等效 2D 版的 2048 难度
+    WIN_VALUE = 32768
 
     def __init__(self) -> None:
         """初始化空棋盘并随机生成两个初始方块。"""
