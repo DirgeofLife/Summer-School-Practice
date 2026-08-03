@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code internal
+.claude/
+
+# Temp / archive
+game-engine-temp/
+game-engine-1.0.0.zip
+Trae-try/
