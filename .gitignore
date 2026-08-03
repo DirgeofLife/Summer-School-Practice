@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+game/
 
 # IDE
 .idea/
